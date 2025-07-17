@@ -12,8 +12,8 @@ A Transformer-based password generation model combining pattern conditioning, ve
 
 ## Training
 
-```bash
-python train.py --dataset_path data/train.txt 
+  python train.py --dataset_path data/train.txt 
+  
 # 🔐 VQ-PassGPT - DGT Password Generation
 
 This repository implements **VQ-PassGPT**, a Transformer-based password guessing model that incorporates structural pattern guidance, vector quantization, and a divide-and-conquer generation strategy (DGT). This README explains how to generate passwords using the `DGT_gen.py` script.
