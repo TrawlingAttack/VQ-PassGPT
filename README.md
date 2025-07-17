@@ -11,8 +11,9 @@ A Transformer-based password generation model combining pattern conditioning, ve
 - Easily extendable and trainable via HuggingFace Trainer
 
 ## Training
-
-  python train.py --dataset_path data/train.txt 
+```bash
+python train.py --dataset_path data/train.txt
+```
   
 # 🔐 VQ-PassGPT - DGT Password Generation
 
