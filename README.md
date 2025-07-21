@@ -17,7 +17,7 @@ python train.py --dataset_path data/train.txt
   
 # 🔐 VQ-PassGPT - DGT Password Generation
 
-This repository implements **VQ-PassGPT**, a Transformer-based password guessing model that incorporates structural pattern guidance, vector quantization, and a divide-and-conquer generation strategy (DGT). This README explains how to generate passwords using the `DGT_gen.py` script.
+This repository implements **VQ-PassGPT**, a Transformer-based password guessing model that incorporates structural pattern guidance, vector quantization, and a divide-and-conquer generation strategy. This README explains how to generate passwords using the `D&C-GEN.py` script.
 
 ---
 
@@ -43,12 +43,12 @@ The script `DGT_gen.py` supports large-scale, pattern-conformant password guessi
 ### Basic Command
 
 ```bash
-python DGT_gen.py \
+python D&C-GEN.py \
   --model_path model/last/ \
   --output_path ./generated/ \
   --pattern_path patterns.txt \
   --generate_num 1000000
-
+```
 ## Normal generate
 
 ```bash
