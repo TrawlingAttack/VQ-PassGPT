@@ -7,7 +7,7 @@ A Transformer-based password generation model combining pattern conditioning, ve
 - Built on GPT-2 decoder-only architecture
 - Integrates vector quantization (VQ) to compress representations
 - Supports pattern-guided password generation
-- Uses DGT (divide-and-conquer) for efficient decoding
+- Uses D&C (divide-and-conquer) for efficient decoding
 - Easily extendable and trainable via HuggingFace Trainer
 
 ## Training
@@ -15,15 +15,15 @@ A Transformer-based password generation model combining pattern conditioning, ve
 python train.py --dataset_path data/train.txt
 ```
   
-# 🔐 VQ-PassGPT - DGT Password Generation
+# 🔐 VQ-PassGPT - D&C Password Generation
 
-This repository implements **VQ-PassGPT**, a Transformer-based password guessing model that incorporates structural pattern guidance, vector quantization, and a divide-and-conquer generation strategy. This README explains how to generate passwords using the `D&C-GEN.py` script.
+This repository implements **VQ-PassGPT**, a Transformer-based password guessing model that incorporates structural pattern guidance, vector quantization, and a divide-and-conquer generation strategy. This README explains how to generate passwords using the `D&C_GEN.py` script.
 
 ---
 
-## DGT-based Password Generation
+## D&C-based Password Generation
 
-The script `DGT_gen.py` supports large-scale, pattern-conformant password guessing using a trained VQ-PassGPT model and pattern frequency distribution. It uses a recursive divide-and-conquer mechanism to improve coverage and minimize duplication.
+The script `D&C_GEN.py` supports large-scale, pattern-conformant password guessing using a trained VQ-PassGPT model and pattern frequency distribution. It uses a recursive divide-and-conquer mechanism to improve coverage and minimize duplication.
 
 ---
 
@@ -43,7 +43,7 @@ The script `DGT_gen.py` supports large-scale, pattern-conformant password guessi
 ### D&C generate
 
 ```bash
-python D&C-GEN.py \
+python D&C_GEN.py \
   --model_path model/last/ \
   --output_path ./generated/ \
   --pattern_path patterns.txt \
