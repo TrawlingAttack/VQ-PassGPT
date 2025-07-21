@@ -124,7 +124,7 @@ config = GPT2Config(
 print("Initializing VQ-PassGPT model from scratch...")
 model = VQPassGPTModel(config=config, use_vq=True)
 
-print(f"✅ Total parameters: {model.num_parameters():,}")
+print(f"Total parameters: {model.num_parameters():,}")
 
 
 # ----------------------------
@@ -169,4 +169,4 @@ os.makedirs(save_path, exist_ok=True)
 
 model.config.save_pretrained(save_path)
 torch.save(model.state_dict(), os.path.join(save_path, "pytorch_model.bin"))
-print(f"✅ Model and weights saved at {save_path}")
+print(f"Model and weights saved at {save_path}")
