@@ -40,7 +40,7 @@ The script `D&C_GEN.py` supports large-scale, pattern-conformant password guessi
 
 ## Usage
 
-### D&C generate
+### D&C Generation
 
 ```bash
 python D&C_GEN.py \
@@ -49,7 +49,7 @@ python D&C_GEN.py \
   --pattern_path patterns.txt \
   --generate_num 1000000
 ```
-### Normal generate
+### Normal Generation
 
 ```bash
 python normal-gen.py --output_path gen_
