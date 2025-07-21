@@ -2,9 +2,8 @@
 
 from tokenizer.char_tokenizer import CharTokenizer
 from datasets import load_dataset
-from transformers import GPT2Config,GPT2LMHeadModel,GPT2Model, Trainer, TrainingArguments, EarlyStoppingCallback, DataCollatorForLanguageModeling
+from transformers import GPT2Config,Trainer, TrainingArguments, EarlyStoppingCallback, DataCollatorForLanguageModeling
 from model.vq_passgpt import VQPassGPTModel
-from collections import OrderedDict
 import time
 import argparse
 import torch
