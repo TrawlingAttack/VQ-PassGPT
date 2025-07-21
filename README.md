@@ -53,8 +53,5 @@ python D&C-GEN.py \
 
 ```bash
 python normal-gen.py --output_path gen_
+```
 
-## D&C generate
-
-```bash
-python D&C_GEN.py --model_path model/last-step --output_path gen_
