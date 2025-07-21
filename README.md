@@ -40,7 +40,7 @@ The script `DGT_gen.py` supports large-scale, pattern-conformant password guessi
 
 ## Usage
 
-### Basic Command
+## D&C generate
 
 ```bash
 python D&C-GEN.py \
