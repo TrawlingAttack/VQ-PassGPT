@@ -48,3 +48,13 @@ python DGT_gen.py \
   --output_path ./generated/ \
   --pattern_path patterns.txt \
   --generate_num 1000000
+
+## Normal generate
+
+```bash
+python normal-gen.py --output_path gen_
+
+## D&C generate
+
+```bash
+python D&C_GEN.py --model_path model/last-step --output_path gen_

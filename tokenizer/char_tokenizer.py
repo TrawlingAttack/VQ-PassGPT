@@ -50,22 +50,25 @@ class CharTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.encoder)
     
-    def _tokenize(self, text: str) -> List[char]:
+    def _tokenize(self, text: str) -> List[str]:
         if text == '':
             return []
-        # result = []
-        # while len(text) != 0:
-        #     is_hit = False
-        #     for vocab in self.encoder:
-        #         if text.startswith(vocab):
-        #             result.append(vocab)
-        #             text = text[len(vocab):]
-        #             is_hit = True
-        #             break
-        #     if not is_hit:
-        #         result.append(self.unk_token)
-        #         text = text[1:]
-        return text.strip(' ').split(' ')
+
+        tokens = []
+        text = text.strip()
+        while text:
+            matched = False
+            for token in sorted(self.encoder.keys(), key=lambda x: -len(x)):  # ưu tiên token dài
+                if text.startswith(token):
+                    tokens.append(token)
+                    text = text[len(token):].lstrip()  # bỏ khoảng trắng sau token
+                    matched = True
+                    break
+            if not matched:
+                tokens.append(self.unk_token)
+                text = text[1:].lstrip()
+        return tokens
+
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
