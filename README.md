@@ -48,11 +48,11 @@ The script `D&C_GEN.py` supports large-scale, pattern-conformant password guessi
 ### D&C Generation
 
 ```bash
-python D&C_GEN.py --model_path model/last/ --output_path ./generated/ --pattern_path patterns.txt --generate_num 1000000
+python D&C_GEN.py --model_path model\last-step --output_path ./generated/ --pattern_path patterns.txt --generate_num 1000000
 ```
 ### Normal Generation
 
 ```bash
-python normal-gen.py --model_path model\last-step --output_path gen_ --batch_size 100 --generate_num 1000000
+python normal-gen.py --model_path model\last-step --output_path ./generated/ --batch_size 100 --generate_num 1000000
 ```
 
