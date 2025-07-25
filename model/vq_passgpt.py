@@ -79,12 +79,35 @@ class VQPassGPTModel(GPT2LMHeadModel):
             return_dict=True,  # luôn lấy dict để dễ xử lý
         )
 
-        hidden_states = transformer_outputs.last_hidden_state
+        hidden_states = transformer_outputs.last_hidden_state  # shape: (B, T, D)
 
         vq_loss1 = vq_loss2 = 0.0
         if self.use_vq:
-            hidden_states, vq_loss1 = self.vq1(hidden_states)
+            # Tìm vị trí <SEP> token (id = 1) trong từng sequence (batch-first)
+            sep_token_id = 1
+            sep_positions = (input_ids == sep_token_id).nonzero(as_tuple=False)  # (N, 2): [batch_idx, pos]
+
+            # Mặc định: giả sử chỉ có 1 <SEP> mỗi sample
+            new_hidden_states = hidden_states.clone()
+            for b_idx in range(hidden_states.size(0)):
+                # vị trí <SEP> đầu tiên trong sample
+                sep_pos = (input_ids[b_idx] == sep_token_id).nonzero(as_tuple=False)
+                if len(sep_pos) == 0:
+                    continue  # không có <SEP>, bỏ qua
+                sep_idx = sep_pos[0].item()
+
+                # Lấy phần pattern từ đầu đến sep_idx (bao gồm <SEP>)
+                pattern = hidden_states[b_idx, :sep_idx + 1, :]  # (L, D)
+                pattern_q, loss1 = self.vq1(pattern)
+
+                # Gán lại vào hidden_states
+                new_hidden_states[b_idx, :sep_idx + 1, :] = pattern_q
+                vq_loss1 += loss1
+
+            hidden_states = new_hidden_states
+            # Toàn bộ sequence được lượng tử hóa tiếp bằng VQ2 (nếu muốn)
             hidden_states, vq_loss2 = self.vq2(hidden_states)
+
 
         logits = self.lm_head(hidden_states)
 
