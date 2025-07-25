@@ -10,8 +10,10 @@ A Transformer-based password generation model combining pattern conditioning, ve
 - Uses D&C (divide-and-conquer) for efficient decoding
 - Easily extendable and trainable via HuggingFace Trainer
 ## Dataset
-You are encouraged to train using your own password leaks and datasets. Some great places to find those include:
-
+This file provides links to password leak datasets used in training and evaluating neural password generation models, particularly under trawling and targeted attack scenarios.
+We strongly encourage researchers and practitioners to train models using real-world password leaks. Below are curated datasets that have been cleaned and organized for experimentation.
+https://github.com/TrawlingAttack/VQ-PassGPT/releases/download/leakpass/leakdataset.zip
+https://github.com/brannondorsey/PassGAN/releases/download/data/68_linkedin_found_hash_plain.txt.zip
 ## Training
 ```bash
 python train.py --dataset_path data/train.txt
