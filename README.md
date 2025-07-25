@@ -38,7 +38,7 @@ The script `D&C_GEN.py` supports large-scale, pattern-conformant password guessi
 - PyTorch ≥ 1.12
 - Transformers ≥ 4.30
 - `tokenizer/char_tokenizer.py`
-- Trained VQ-PassGPT model (e.g. under `model/last/`)
+- Trained VQ-PassGPT model (e.g. under `model\last-step`)
 - Pattern distribution file (`patterns.txt`), tab-separated with two columns: `pattern` and `rate`
 
 ---
