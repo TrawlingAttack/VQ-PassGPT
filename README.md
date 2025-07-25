@@ -9,6 +9,8 @@ A Transformer-based password generation model combining pattern conditioning, ve
 - Supports pattern-guided password generation
 - Uses D&C (divide-and-conquer) for efficient decoding
 - Easily extendable and trainable via HuggingFace Trainer
+## Dataset
+You are encouraged to train using your own password leaks and datasets. Some great places to find those include:
 
 ## Training
 ```bash
