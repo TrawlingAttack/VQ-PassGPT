@@ -105,7 +105,7 @@ class VQPassGPTModel(GPT2LMHeadModel):
                 vq_loss1 += loss1
 
             hidden_states = new_hidden_states
-            # Toàn bộ sequence được lượng tử hóa tiếp bằng VQ2 (nếu muốn)
+            # Toàn bộ sequence được lượng tử hóa tiếp bằng VQ2
             hidden_states, vq_loss2 = self.vq2(hidden_states)
 
 
