@@ -9,6 +9,14 @@ A Transformer-based password generation model combining pattern conditioning, ve
 - Supports pattern-guided password generation
 - Uses D&C (divide-and-conquer) for efficient decoding
 - Easily extendable and trainable via HuggingFace Trainer
+## Prerequisites
+- Python 3.8+
+- PyTorch ≥ 1.12
+- Transformers ≥ 4.30
+- `tokenizer/char_tokenizer.py`
+- Trained VQ-PassGPT model (e.g. under `model\last-step`)
+- Pattern distribution file (`patterns.txt`), tab-separated with two columns: `pattern` and `rate`
+---
 ## Environment
 ```bash
 conda create -n vqpassgpt python=3.8.10
@@ -44,17 +52,6 @@ This repository implements **VQ-PassGPT**, a Transformer-based password guessing
 ## D&C-based Password Generation
 
 The script `D&C_GEN.py` supports large-scale, pattern-conformant password guessing using a trained VQ-PassGPT model and pattern frequency distribution. It uses a recursive divide-and-conquer mechanism to improve coverage and minimize duplication.
-
----
-
-## Prerequisites
-
-- Python 3.8+
-- PyTorch ≥ 1.12
-- Transformers ≥ 4.30
-- `tokenizer/char_tokenizer.py`
-- Trained VQ-PassGPT model (e.g. under `model\last-step`)
-- Pattern distribution file (`patterns.txt`), tab-separated with two columns: `pattern` and `rate`
 
 ---
 
