@@ -61,7 +61,11 @@ The script `D&C_GEN.py` supports large-scale, pattern-conformant password guessi
 ## Usage
 
 ### D&C Generation
-
+Create pattern rates
+```bash
+python get_pattern_rate.py --dataset_path train_cleaned.txt --output_path patterns.txt
+```
+Generation
 ```bash
 python D&C_GEN.py --model_path model\last-step --output_path ./generated/ --pattern_path patterns.txt --generate_num 1000000
 ```
