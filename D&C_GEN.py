@@ -1,10 +1,9 @@
 # This file aims to realize D&C-GEN.
-
-
 from typing import Any
 import torch
-from transformers import GPT2LMHeadModel, StoppingCriteria, StoppingCriteriaList, LogitsProcessorList
+from transformers import StoppingCriteria, StoppingCriteriaList, LogitsProcessorList
 from tokenizer import CharTokenizer
+from model.vq_passgpt import VQPassGPTModel
 import time
 import threading
 import pandas as pd
@@ -65,7 +64,7 @@ class SplitBigTask2SmallTask():
         self.pcfg_pattern = pcfg_pattern
         # self.gen_num = gen_num
         self.device = device
-        self.model = GPT2LMHeadModel.from_pretrained(model_path).to(self.device)
+        self.model = VQPassGPTModel.from_pretrained(model_path,use_vq=True,local_files_only=True).to(device).eval()
         self.tokenizer = tokenizer
         init_input_ids = tokenizer.encode_forgen(pcfg_pattern)
         init_input_ids = torch.concat([init_input_ids, torch.tensor([tokenizer.sep_token_id])]).view(1, -1)
@@ -145,7 +144,7 @@ class SplitBigTask2SmallTask():
     
  
 def directly_gen(tokenizer, device, input_ids, gen_num):
-    model = GPT2LMHeadModel.from_pretrained(model_path).to(device)
+    model = VQPassGPTModel.from_pretrained(model_path,use_vq=True,local_files_only=True).to(device).eval()
     passwords = []
 
     stop_ids = [tokenizer.pad_token_id]
