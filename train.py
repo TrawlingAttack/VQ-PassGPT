@@ -49,30 +49,6 @@ def load_matching_weights(target_model, pretrained_model):
     target_model.load_state_dict(target_dict, strict=False)
     return len(matched)
 
-# # ----------------------------
-# # Custom Data Collator
-# # ----------------------------
-# def custom_collator(batch):
-#     input_ids = [torch.tensor(x["input_ids"]) for x in batch]
-#     input_ids = torch.stack(input_ids)
-
-#     attention_mask = (input_ids != tokenizer.pad_token_id).long()
-#     labels = input_ids.clone()
-
-#     for i in range(labels.size(0)):
-#         eos_pos = (labels[i] == tokenizer.eos_token_id).nonzero()
-#         if eos_pos.numel() > 0:
-#             eos_idx = eos_pos[0].item()
-#             labels[i][eos_idx+1:] = -100
-#         else:
-#             labels[i] = -100
-
-#     return {
-#         "input_ids": input_ids,
-#         "attention_mask": attention_mask,
-#         "labels": labels,
-#     }
-
 SEP_ID = 1
 def validate_ids(ids):
     # ids: List[int]
@@ -80,8 +56,8 @@ def validate_ids(ids):
     if ids[-1] != tokenizer.eos_token_id: return False
     if SEP_ID not in ids: return False
     sep_pos = ids.index(SEP_ID)
-    pattern = ids[1:sep_pos]        # sau BOS, trước SEP
-    passwd  = ids[sep_pos+1:-1]     # sau SEP, trước EOS
+    pattern = ids[1:sep_pos]       
+    passwd  = ids[sep_pos+1:-1]   
     if not all(5 <= t <= 40 for t in pattern): return False
     if not all(41 <= t <= 134 for t in passwd): return False
     return True
@@ -89,13 +65,10 @@ def encode_row(batch):
     texts = batch["text"]  # list[str]
     input_ids_list, attn_list = [], []
     for s in texts:
-        enc = tokenizer(s)  # hoặc tokenizer.encode + tự build attention_mask
+        enc = tokenizer(s)
         ids = enc["input_ids"]
         if not validate_ids(ids):
-            # BỎ/LOG/RAISE tuỳ ý
-            # raise ValueError(f"Bad sample: {ids}")
             continue
-        # pad/truncate về args.input_size
         L = len(ids)
         max_len = args.input_size
         if L > max_len:
@@ -107,8 +80,6 @@ def encode_row(batch):
         input_ids_list.append(ids)
         attn_list.append(attn)
     return {"input_ids": input_ids_list, "attention_mask": attn_list, "labels": input_ids_list}
-
-
 
 def compute_metrics(eval_pred):
     loss = eval_pred.loss
@@ -156,19 +127,16 @@ config = GPT2Config(
     scale_attn_by_inverse_layer_idx=False,
     reorder_and_upcast_attn=False,
 )
-# ĐẶT CÁC ID ĐẶC BIỆT
 config.bos_token_id = tokenizer.bos_token_id
 config.eos_token_id = tokenizer.eos_token_id
 config.sep_token_id = tokenizer.sep_token_id
 config.pad_token_id = tokenizer.pad_token_id
 
-# (tùy chọn) bật ràng buộc trong train
 config.enforce_constraints_train = True
 
 model = VQPassGPTModel(config=config, use_vq=True)
 
 print(f"Total parameters: {model.num_parameters():,}")
-
 
 # ----------------------------
 # Trainer Configuration
@@ -212,7 +180,6 @@ trainer.train()
 print("Saving final model...")
 save_path = os.path.join(args.model_path, "last-step")
 os.makedirs(save_path, exist_ok=True)
-# Lưu model như thường
 model.config.use_vq = True
 model.save_pretrained(save_path, safe_serialization=True)
 torch.save(model.state_dict(), os.path.join(save_path, "pytorch_model.bin"))
