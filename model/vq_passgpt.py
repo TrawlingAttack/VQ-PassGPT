@@ -6,19 +6,11 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 
 class VQPassGPTModel(GPT2LMHeadModel):
-    """
-    - Decoder-only GPT-2 + 1 bottleneck VQ cho phần pattern.
-    - VQ codebook = các vector embedding của TẬP TOKEN HỢP LỆ CHO PATTERN (ID 5..40),
-      tức là nearest-neighbor vào wte[5..40] (không học codebook riêng).
-    - Password không qua VQ.
-    - (Tuỳ chọn) vẫn có mask cấu trúc trong train để loss chỉ "thấy" tập hợp hợp lệ từng pha.
-    """
 
     def __init__(self, config, use_vq: bool = True):
         super().__init__(config)
         self.use_vq = bool(use_vq)
 
-        # Đọc id đặc biệt từ config (fallback an toàn)
         def _norm_id(x, default):
             return int(x) if x is not None else int(default)
 
@@ -27,23 +19,17 @@ class VQPassGPTModel(GPT2LMHeadModel):
         self.eos_token_id = _norm_id(getattr(config, "eos_token_id", None), 2)
         self.pad_token_id = _norm_id(getattr(config, "pad_token_id", None), 4)
 
-        # Miền ID (đúng theo vocab của bạn)
+
         self.pattern_ids  = torch.arange(5, 41)    # [5..40]
         self.password_ids = torch.arange(41, 135)  # [41..134]
 
-        # Bật/tắt mask cấu trúc trong train
         self.enforce_constraints_train = bool(getattr(config, "enforce_constraints_train", True))
-
-        # Hệ số VQ (commitment loss)
         self.vq_beta = float(getattr(config, "vq_beta", 0.1))
 
-        # Kiểm tra nhanh
         if self.config.vocab_size is not None:
             vmax = int(self.config.vocab_size) - 1
             assert int(self.pattern_ids.max()) <= vmax and int(self.password_ids.max()) <= vmax, \
                 "pattern/password IDs vượt quá vocab_size!"
-
-    # ------ VQ trên không gian embedding của token pattern ------
     @torch.no_grad()
     def _nearest_pattern_embed(self, z: torch.Tensor) -> torch.Tensor:
         """
@@ -53,7 +39,7 @@ class VQPassGPTModel(GPT2LMHeadModel):
         # Lấy ma trận embedding ứng với các token pattern (K, D)
         codebook = self.transformer.wte.weight[self.pattern_ids.to(z.device)]  # không học codebook riêng
 
-        # Khoảng cách bình phương: ||z||^2 - 2 z E^T + ||E||^2
+        # Khoảng cách bình phương:
         zf = z.view(-1, z.size(-1))                         # (L, D)
         zz = (zf ** 2).sum(dim=1, keepdim=True)             # (L, 1)
         ee = (codebook ** 2).sum(dim=1).unsqueeze(0)        # (1, K)
@@ -64,10 +50,6 @@ class VQPassGPTModel(GPT2LMHeadModel):
         return z_q
 
     def _apply_structural_mask(self, shift_logits, shift_inputs):
-        """
-        Trước <SEP>: chỉ cho phép pattern_ids ∪ {SEP}
-        Sau  <SEP>: chỉ cho phép password_ids ∪ {EOS}
-        """
         B, Tm1, V = shift_logits.size()
         device = shift_logits.device
 
@@ -126,15 +108,14 @@ class VQPassGPTModel(GPT2LMHeadModel):
             B, T, D = hidden_states.size()
             new_hidden = hidden_states.clone()
             for b in range(B):
-                # vị trí <SEP> đầu tiên
+                # Vị trí <SEP> đầu tiên
                 pos = (input_ids[b] == self.sep_token_id).nonzero(as_tuple=False)
                 if len(pos) == 0:
                     continue
                 sep_idx = int(pos[0])
-                # Lấy đoạn [0..sep_idx] (bao gồm BOS..SEP) để VQ về codebook pattern
                 z = hidden_states[b, :sep_idx + 1, :]               # (L, D)
                 with torch.no_grad():
-                    z_q = self._nearest_pattern_embed(z)            # lượng tử hoá NN về wte[5..40]
+                    z_q = self._nearest_pattern_embed(z)       
                 # straight-through trick: (z_q - z).detach() + z
                 new_hidden[b, :sep_idx + 1, :] = z + (z_q - z).detach()
                 # commitment loss (codebook không học → không cần codebook loss)
@@ -150,7 +131,6 @@ class VQPassGPTModel(GPT2LMHeadModel):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
 
-            # Mask cấu trúc trong train để loss chỉ tính trên tập hợp hợp lệ
             if self.training and self.enforce_constraints_train:
                 shift_inputs = (input_ids if input_ids is not None else labels)[..., :-1].contiguous()
                 shift_logits = self._apply_structural_mask(shift_logits, shift_inputs)
@@ -172,7 +152,6 @@ class VQPassGPTModel(GPT2LMHeadModel):
             attentions=outputs.attentions,
         )
 
-    # ----- generation hooks -----
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
