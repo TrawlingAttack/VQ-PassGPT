@@ -1,143 +1,178 @@
-from model.vq_passgpt import VQPassGPTModel
-from transformers import GPT2Config, GPT2LMHeadModel
+import os
 import time
 import threading
-import torch
-from tokenizer import CharTokenizer
 import argparse
-import os
-    
-MAX_LEN = 32    # It should be equal to input size of model.
+
+import torch
+from model.vq_passgpt import VQPassGPTModel
+from tokenizer import CharTokenizer
+
+MAX_LEN = 32  # phải <= config.n_positions khi train
+
 
 class ThreadBase(threading.Thread):
-    """ overload threading, so that it can return values """
+    """Thread wrapper để luôn có result (tránh NoneType)."""
     def __init__(self, target=None, args=()):
         super().__init__()
         self.func = target
         self.args = args
- 
+        self.result = []  # mặc định rỗng
+
     def run(self):
-        self.result = self.func(*self.args)
- 
-    def get_result(self):
         try:
-            return self.result
-        except Exception as e:
-            print(e)
-            return None
+            self.result = self.func(*self.args)
+        except Exception:
+            import traceback; traceback.print_exc()
+            self.result = []
+
+    def get_result(self):
+        return self.result
+
 
 def gen_sample(test_model_path, tokenizer, GEN_BATCH_SIZE, GPU_ID):
-    model = GPT2LMHeadModel.from_pretrained(test_model_path)
-    
-    device = "cuda:"+str(GPU_ID)
-    model.to(device)
-    model.eval()
+    # khoá GPU theo thread
+    if torch.cuda.is_available():
+        torch.cuda.set_device(GPU_ID)
+        device = torch.device(f"cuda:{GPU_ID}")
+    else:
+        device = torch.device("cpu")
 
-    inputs = torch.tensor([[tokenizer.bos_token_id]])  # bắt đầu bằng <BOS>
-    inputs = inputs.to(device)
+    # chuẩn hoá path + load local
+    test_model_path = os.path.normpath(test_model_path)
+    model = VQPassGPTModel.from_pretrained(
+        test_model_path,
+        use_vq=True,
+        local_files_only=True
+    ).to(device).eval()
 
+    # pad_token fallback
+    if getattr(tokenizer, "pad_token_id", None) is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id or 0
 
-    outputs = model.generate(
-        input_ids=inputs,
-        pad_token_id=tokenizer.pad_token_id,
-        max_length=MAX_LEN,
-        do_sample=True,
-        num_return_sequences=GEN_BATCH_SIZE,
-        eos_token_id=tokenizer.eos_token_id,
-    )
+    BOS = tokenizer.bos_token_id
+    EOS = tokenizer.eos_token_id
+    PAD = tokenizer.pad_token_id
 
-    print("Generated token ids:", outputs[0].tolist())
-    outputs = tokenizer.batch_decode(outputs)
-    passwords = set(outputs)
-    return list(passwords)
+    # sanity (không bắt buộc, hữu ích khi debug)
+    cfg = model.config
+    # đảm bảo độ dài tổng không vượt n_positions
+    if hasattr(cfg, "n_positions") and MAX_LEN > int(cfg.n_positions):
+        raise ValueError(f"MAX_LEN={MAX_LEN} > n_positions={cfg.n_positions}. Hãy train với n_positions >= {MAX_LEN}.")
+
+    # seed BOS cho mỗi sequence
+    inputs = torch.full((GEN_BATCH_SIZE, 1), BOS, dtype=torch.long, device=device)
+
+    with torch.no_grad():
+        # 1-phase generate “tự do”
+        outputs = model.generate(
+            input_ids=inputs,
+            max_length=MAX_LEN,                 # tổng chiều dài (bao gồm BOS..EOS..PAD)
+            do_sample=True,
+            top_p=0.95,
+            temperature=0.9,
+            pad_token_id=PAD,
+            eos_token_id=EOS,
+        )
+
+    # decode “bình thường” theo CharTokenizer của bạn
+    def decode_ids(seq):
+        seq = seq.tolist()
+        # cắt ở EOS (tuỳ ý)
+        if EOS in seq:
+            seq = seq[:seq.index(EOS) + 1]
+        # bỏ PAD
+        seq = [t for t in seq if t != PAD]
+        return tokenizer.decode(seq)
+
+    texts = [decode_ids(s) for s in outputs]
+    return list(set(texts))
 
 
 def gen_parallel(vocab_file, batch_size, test_model_path, N, gen_passwords_path, num_gpus, gpu_index):
-    print(f'Load tokenizer.')
-    tokenizer = CharTokenizer(vocab_file=vocab_file, 
-                              bos_token="<BOS>",
-                              eos_token="<EOS>",
-                              sep_token="<SEP>",
-                              unk_token="<UNK>",
-                              pad_token="<PAD>"
-                              )
+    print('Load tokenizer.')
+    tokenizer = CharTokenizer(
+        vocab_file=vocab_file,
+        bos_token="<BOS>",
+        eos_token="<EOS>",
+        sep_token="<SEP>",
+        unk_token="<UNK>",
+        pad_token="<PAD>"
+    )
     tokenizer.padding_side = "left"
 
-    # mulit gpu parallel
-    if not torch.cuda.is_available():
-        print('ERROR! GPU not found!')
-    else:
-        total_start = time.time()
-        threads = {}
-        total_passwords = []
+    if not torch.cuda.is_available() and num_gpus > 0:
+        print('WARNING: GPU not found, sẽ chạy CPU.')
 
-        total_round = N//batch_size
-        print('*'*30)
-        print(f'Generation begin.')
-        print('Total generation needs {} batchs.'.format(total_round))
+    total_start = time.time()
+    threads = {}
+    total_passwords = []
 
-        i = 0
-        while(i < total_round or len(threads) > 0 ):
-            if len(threads) == 0:
-                for gpu_id in range(num_gpus):
-                    if i < total_round:
-                        t=ThreadBase(target=gen_sample, args=(test_model_path, tokenizer, batch_size, gpu_id+gpu_index))
-                        t.start()
-                        threads[t] = i
-                        i += 1
-            
-            # check whether some threads have finished.
-            temp_threads = threads.copy()
-            for t in temp_threads:
-                t.join()
-                if not t.is_alive():
-                    new_passwords = t.get_result()
-                    new_num = len(new_passwords)
-                    total_passwords += new_passwords
-                    print('[{}/{}] generated {}.'.format(temp_threads[t]+1, total_round, new_num))
-                    threads.pop(t)
-               
-        total_passwords = set(total_passwords)
+    total_round = N // batch_size
+    print('*' * 30)
+    print('Generation begin.')
+    print(f'Total generation needs {total_round} batchs.')
 
-        gen_passwords_path = gen_passwords_path + 'Normal-GEN' + '.txt'
-        
-        f_gen = open(gen_passwords_path, 'w', encoding='utf-8', errors='ignore')
-        for password in total_passwords:
-            f_gen.write(password+'\n')
+    i = 0
+    while i < total_round or len(threads) > 0:
+        if len(threads) == 0:
+            for gpu_id in range(num_gpus):
+                if i < total_round:
+                    t = ThreadBase(
+                        target=gen_sample,
+                        args=(test_model_path, tokenizer, batch_size, gpu_id + gpu_index)
+                    )
+                    t.start()
+                    threads[t] = i
+                    i += 1
 
-        total_end = time.time()
-        total_time = total_end-total_start
-        
-        print('Generation file saved in: {}'.format(gen_passwords_path))
-        print('Generation done.')
-        print('*'*30)
-        print('Use time:{}'.format(total_time))
-        
+        # check threads finished
+        temp_threads = list(threads.items())
+        for t, idx in temp_threads:
+            t.join()
+            if not t.is_alive():
+                new_passwords = t.get_result()  # luôn là list
+                new_num = len(new_passwords)
+                total_passwords += new_passwords
+                print(f'[{idx + 1}/{total_round}] generated {new_num}.')
+                threads.pop(t)
+
+    total_passwords = set(total_passwords)
+
+    os.makedirs(gen_passwords_path, exist_ok=True)
+    out_file = os.path.join(gen_passwords_path, 'Normal-GEN.txt')
+    with open(out_file, 'w', encoding='utf-8', errors='ignore') as f_gen:
+        for pw in total_passwords:
+            f_gen.write(pw + '\n')
+
+    total_time = time.time() - total_start
+    print(f'Generation file saved in: {out_file}')
+    print('Generation done.')
+    print('*' * 30)
+    print(f'Use time:{total_time:.2f}s')
+
 
 if __name__ == '__main__':
-    
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", help="directory of pagpassgpt", type=str, default='model\last-step')
-    parser.add_argument("--vocabfile_path", help="path of vocab file", type=str, default='./tokenizer/vocab.json')
-    parser.add_argument("--output_path", help="path of output file path", type=str, required=True)
-    parser.add_argument("--generate_num", help="total guessing number", default=100, type=int)
-    parser.add_argument("--batch_size", help="generate batch size", default=10, type=int)
-    parser.add_argument("--gpu_num", help="gpu num", default=1, type=int)
-    parser.add_argument("--gpu_index", help="Starting GPU index", default=0, type=int)
+    parser.add_argument("--model_path", type=str, default='model/last-step', help="directory of VQPassGPT checkpoint")
+    parser.add_argument("--vocabfile_path", type=str, default='./tokenizer/vocab.json', help="path of vocab file")
+    parser.add_argument("--output_path", type=str, required=True, help="directory to save results")
+    parser.add_argument("--generate_num", default=100, type=int, help="total number to generate")
+    parser.add_argument("--batch_size", default=10, type=int, help="generate batch size")
+    parser.add_argument("--gpu_num", default=1, type=int, help="number of gpus to use")
+    parser.add_argument("--gpu_index", default=0, type=int, help="starting GPU index")
     args = parser.parse_args()
 
     model_path = args.model_path
     vocab_file = args.vocabfile_path
-    output_path = args.output_path
+    output_path = os.path.join(args.output_path, str(args.generate_num))
+    os.makedirs(output_path, exist_ok=True)
 
-    n = args.generate_num
-    batch_size = args.batch_size
-    num_gpus = args.gpu_num
-    gpu_index = args.gpu_index
-
-    output_path = output_path + str(n) + '/'
-    folder = os.path.exists(output_path)
-    if not folder:
-        os.makedirs(output_path)
-    
-    gen_parallel(vocab_file, batch_size, model_path, n, output_path, num_gpus, gpu_index)
+    gen_parallel(
+        vocab_file=vocab_file,
+        batch_size=args.batch_size,
+        test_model_path=model_path,
+        N=args.generate_num,
+        gen_passwords_path=output_path,
+        num_gpus=args.gpu_num,
+        gpu_index=args.gpu_index
+    )
