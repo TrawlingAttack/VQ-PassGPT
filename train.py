@@ -8,7 +8,6 @@ import torch
 import os
 import math
 os.environ["WANDB_DISABLED"] = "true"
-
 # ----------------------------
 # Argument Parsing
 # ----------------------------
