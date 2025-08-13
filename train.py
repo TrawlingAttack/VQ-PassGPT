@@ -1,5 +1,3 @@
-# VQ-PassGPT Training Script with Fixed Collator
-
 from tokenizer.char_tokenizer import CharTokenizer
 from datasets import load_dataset
 from transformers import GPT2Config,Trainer, TrainingArguments, EarlyStoppingCallback, DataCollatorForLanguageModeling
@@ -74,6 +72,44 @@ def load_matching_weights(target_model, pretrained_model):
 #         "attention_mask": attention_mask,
 #         "labels": labels,
 #     }
+
+SEP_ID = 1
+def validate_ids(ids):
+    # ids: List[int]
+    if ids[0] != tokenizer.bos_token_id: return False
+    if ids[-1] != tokenizer.eos_token_id: return False
+    if SEP_ID not in ids: return False
+    sep_pos = ids.index(SEP_ID)
+    pattern = ids[1:sep_pos]        # sau BOS, trước SEP
+    passwd  = ids[sep_pos+1:-1]     # sau SEP, trước EOS
+    if not all(5 <= t <= 40 for t in pattern): return False
+    if not all(41 <= t <= 134 for t in passwd): return False
+    return True
+def encode_row(batch):
+    texts = batch["text"]  # list[str]
+    input_ids_list, attn_list = [], []
+    for s in texts:
+        enc = tokenizer(s)  # hoặc tokenizer.encode + tự build attention_mask
+        ids = enc["input_ids"]
+        if not validate_ids(ids):
+            # BỎ/LOG/RAISE tuỳ ý
+            # raise ValueError(f"Bad sample: {ids}")
+            continue
+        # pad/truncate về args.input_size
+        L = len(ids)
+        max_len = args.input_size
+        if L > max_len:
+            ids = ids[:max_len]
+            L = max_len
+        pad_id = tokenizer.pad_token_id
+        ids = ids + [pad_id]*(max_len-L)
+        attn = [1]*L + [0]*(max_len-L)
+        input_ids_list.append(ids)
+        attn_list.append(attn)
+    return {"input_ids": input_ids_list, "attention_mask": attn_list, "labels": input_ids_list}
+
+
+
 def compute_metrics(eval_pred):
     loss = eval_pred.loss
     perplexity = math.exp(loss) if loss < 50 else float("inf")
@@ -84,7 +120,7 @@ def compute_metrics(eval_pred):
 print("Loading dataset...")
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 dataset = load_dataset("text", data_files=args.dataset_path, num_proc=args.num_processer, split="train")
-dataset = dataset.map(lambda e: tokenizer(e["text"], max_len=args.input_size, padding=True), batched=True)
+dataset = dataset.map(encode_row, batched=True, remove_columns=dataset.column_names)
 dataset = dataset.train_test_split(test_size=0.125)
 eval_dataset = dataset["test"]
 train_dataset = dataset["train"]
@@ -110,7 +146,7 @@ config = GPT2Config(
     n_head=args.head_num,
     bos_token_id=tokenizer.bos_token_id,
     eos_token_id=tokenizer.eos_token_id,
-    pad_token_id=tokenizer.pad_token_id,
+    pad_token_id=getattr(tokenizer, "pad_token_id", None),
     activation_function="gelu_new",
     resid_pdrop=0.1,
     embd_pdrop=0.1,
@@ -120,8 +156,15 @@ config = GPT2Config(
     scale_attn_by_inverse_layer_idx=False,
     reorder_and_upcast_attn=False,
 )
+# ĐẶT CÁC ID ĐẶC BIỆT
+config.bos_token_id = tokenizer.bos_token_id
+config.eos_token_id = tokenizer.eos_token_id
+config.sep_token_id = tokenizer.sep_token_id
+config.pad_token_id = tokenizer.pad_token_id
 
-print("Initializing VQ-PassGPT model from scratch...")
+# (tùy chọn) bật ràng buộc trong train
+config.enforce_constraints_train = True
+
 model = VQPassGPTModel(config=config, use_vq=True)
 
 print(f"Total parameters: {model.num_parameters():,}")
@@ -163,10 +206,14 @@ trainer = Trainer(
 print("Starting training...")
 trainer.train()
 
+# ----------------------------
+# Save Final Model
+# ----------------------------
 print("Saving final model...")
 save_path = os.path.join(args.model_path, "last-step")
 os.makedirs(save_path, exist_ok=True)
-
-model.config.save_pretrained(save_path)
+# Lưu model như thường
+model.config.use_vq = True
+model.save_pretrained(save_path, safe_serialization=True)
 torch.save(model.state_dict(), os.path.join(save_path, "pytorch_model.bin"))
 print(f"Model and weights saved at {save_path}")
