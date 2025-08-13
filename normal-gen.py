@@ -7,11 +7,10 @@ import torch
 from model.vq_passgpt import VQPassGPTModel
 from tokenizer import CharTokenizer
 
-MAX_LEN = 32  # phải <= config.n_positions khi train
+MAX_LEN = 32 
 
 
 class ThreadBase(threading.Thread):
-    """Thread wrapper để luôn có result (tránh NoneType)."""
     def __init__(self, target=None, args=()):
         super().__init__()
         self.func = target
@@ -30,14 +29,12 @@ class ThreadBase(threading.Thread):
 
 
 def gen_sample(test_model_path, tokenizer, GEN_BATCH_SIZE, GPU_ID):
-    # khoá GPU theo thread
     if torch.cuda.is_available():
         torch.cuda.set_device(GPU_ID)
         device = torch.device(f"cuda:{GPU_ID}")
     else:
         device = torch.device("cpu")
 
-    # chuẩn hoá path + load local
     test_model_path = os.path.normpath(test_model_path)
     model = VQPassGPTModel.from_pretrained(
         test_model_path,
@@ -45,7 +42,6 @@ def gen_sample(test_model_path, tokenizer, GEN_BATCH_SIZE, GPU_ID):
         local_files_only=True
     ).to(device).eval()
 
-    # pad_token fallback
     if getattr(tokenizer, "pad_token_id", None) is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id or 0
 
@@ -53,20 +49,17 @@ def gen_sample(test_model_path, tokenizer, GEN_BATCH_SIZE, GPU_ID):
     EOS = tokenizer.eos_token_id
     PAD = tokenizer.pad_token_id
 
-    # sanity (không bắt buộc, hữu ích khi debug)
     cfg = model.config
-    # đảm bảo độ dài tổng không vượt n_positions
+
     if hasattr(cfg, "n_positions") and MAX_LEN > int(cfg.n_positions):
         raise ValueError(f"MAX_LEN={MAX_LEN} > n_positions={cfg.n_positions}. Hãy train với n_positions >= {MAX_LEN}.")
 
-    # seed BOS cho mỗi sequence
     inputs = torch.full((GEN_BATCH_SIZE, 1), BOS, dtype=torch.long, device=device)
 
     with torch.no_grad():
-        # 1-phase generate “tự do”
         outputs = model.generate(
             input_ids=inputs,
-            max_length=MAX_LEN,                 # tổng chiều dài (bao gồm BOS..EOS..PAD)
+            max_length=MAX_LEN,                
             do_sample=True,
             top_p=0.95,
             temperature=0.9,
@@ -74,13 +67,10 @@ def gen_sample(test_model_path, tokenizer, GEN_BATCH_SIZE, GPU_ID):
             eos_token_id=EOS,
         )
 
-    # decode “bình thường” theo CharTokenizer của bạn
     def decode_ids(seq):
         seq = seq.tolist()
-        # cắt ở EOS (tuỳ ý)
         if EOS in seq:
             seq = seq[:seq.index(EOS) + 1]
-        # bỏ PAD
         seq = [t for t in seq if t != PAD]
         return tokenizer.decode(seq)
 
@@ -101,7 +91,7 @@ def gen_parallel(vocab_file, batch_size, test_model_path, N, gen_passwords_path,
     tokenizer.padding_side = "left"
 
     if not torch.cuda.is_available() and num_gpus > 0:
-        print('WARNING: GPU not found, sẽ chạy CPU.')
+        print('WARNING: GPU not found, running CPU.')
 
     total_start = time.time()
     threads = {}
@@ -125,7 +115,6 @@ def gen_parallel(vocab_file, batch_size, test_model_path, N, gen_passwords_path,
                     threads[t] = i
                     i += 1
 
-        # check threads finished
         temp_threads = list(threads.items())
         for t, idx in temp_threads:
             t.join()
